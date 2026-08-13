@@ -137,6 +137,24 @@ describe Messages::MessageBuilder do
           expect(Message.where(account_id: account.id, inbox_id: channel_api.inbox.id, source_id: params[:source_id]).count).to eq(1)
         end
 
+        it 'creates an Evolution edit revision once and deduplicates its retry' do
+          original_message = described_class.new(user, conversation, params).perform
+          edited_source_id = "#{params[:source_id]}:EDIT:#{'a' * 64}"
+          edited_params = params.merge(
+            content: "\n\n`Mensagem editada:`\n\nnovo conteúdo",
+            source_id: edited_source_id
+          )
+
+          edited_message = described_class.new(user, conversation, edited_params).perform
+          retried_edit = described_class.new(user, conversation, edited_params).perform
+
+          expect(edited_message.id).not_to eq(original_message.id)
+          expect(retried_edit.id).to eq(edited_message.id)
+          revisions = Message.where(account_id: account.id, inbox_id: channel_api.inbox.id)
+                             .where(source_id: [params[:source_id], edited_source_id])
+          expect(revisions.count).to eq(2)
+        end
+
         it 'does not deduplicate the same WAID across API inboxes' do
           other_channel_api = create(:channel_api, account: account)
           other_conversation = create(:conversation, inbox: other_channel_api.inbox, account: account)

@@ -119,6 +119,33 @@ RSpec.describe 'Conversation Messages API', type: :request do
           expect(response.parsed_body['id']).to eq(first_response['id'])
           expect(conversation.messages.where(source_id: params[:source_id]).count).to eq(1)
         end
+
+        it 'accepts edited Evolution content once and returns it on retry' do
+          source_id = 'WAID:3EB0APIEDIT'
+          edited_source_id = "#{source_id}:EDIT:#{'a' * 64}"
+          url = api_v1_account_conversation_messages_url(account_id: account.id, conversation_id: conversation.display_id)
+          headers = agent.create_new_auth_token
+
+          post url,
+               params: { content: 'mensagem original', message_type: 'incoming', source_id: source_id },
+               headers: headers,
+               as: :json
+          original_id = response.parsed_body['id']
+
+          edited_params = {
+            content: "\n\n`Mensagem editada:`\n\nnovo conteúdo",
+            message_type: 'incoming',
+            source_id: edited_source_id
+          }
+          post url, params: edited_params, headers: headers, as: :json
+          edited_id = response.parsed_body['id']
+          post url, params: edited_params, headers: headers, as: :json
+
+          expect(response).to have_http_status(:success)
+          expect(edited_id).not_to eq(original_id)
+          expect(response.parsed_body['id']).to eq(edited_id)
+          expect(conversation.messages.where(source_id: [source_id, edited_source_id]).count).to eq(2)
+        end
       end
     end
 
