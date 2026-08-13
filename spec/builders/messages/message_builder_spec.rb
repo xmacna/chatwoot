@@ -119,6 +119,51 @@ describe Messages::MessageBuilder do
         message = message_builder
         expect(message.message_type).to eq params[:message_type]
       end
+
+      context 'with an Evolution WAID source_id' do
+        let(:params) do
+          ActionController::Parameters.new({
+                                             content: 'test',
+                                             message_type: 'incoming',
+                                             source_id: 'WAID:3EB0TEST'
+                                           })
+        end
+
+        it 'returns the existing message on a retry' do
+          first_message = described_class.new(user, conversation, params).perform
+          retried_message = described_class.new(user, conversation, params).perform
+
+          expect(retried_message.id).to eq(first_message.id)
+          expect(Message.where(account_id: account.id, inbox_id: channel_api.inbox.id, source_id: params[:source_id]).count).to eq(1)
+        end
+
+        it 'does not deduplicate the same WAID across API inboxes' do
+          other_channel_api = create(:channel_api, account: account)
+          other_conversation = create(:conversation, inbox: other_channel_api.inbox, account: account)
+
+          first_message = described_class.new(user, conversation, params).perform
+          other_message = described_class.new(user, other_conversation, params).perform
+
+          expect(other_message.id).not_to eq(first_message.id)
+        end
+      end
+
+      context 'with a non-WAID source_id' do
+        let(:params) do
+          ActionController::Parameters.new({
+                                             content: 'test',
+                                             message_type: 'incoming',
+                                             source_id: 'legacy-source-id'
+                                           })
+        end
+
+        it 'preserves the existing duplicate behavior' do
+          described_class.new(user, conversation, params).perform
+          described_class.new(user, conversation, params).perform
+
+          expect(Message.where(conversation: conversation, source_id: params[:source_id]).count).to eq(2)
+        end
+      end
     end
 
     context 'when attachment messages' do

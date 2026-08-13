@@ -225,3 +225,4 @@ class Messages::MessageBuilder
 end
 
 Messages::MessageBuilder.prepend_mod_with('Messages::MessageBuilder')
+Messages::MessageBuilder.prepend(Messages::ApiIncomingIdempotency)

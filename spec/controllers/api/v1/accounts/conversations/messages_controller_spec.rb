@@ -105,6 +105,20 @@ RSpec.describe 'Conversation Messages API', type: :request do
               .with(conversation, { account_id: conversation.account_id, inbox_id: conversation.inbox_id, message_type: :activity,
                                     content: 'System reopened the conversation due to a new incoming message.' }))
         end
+
+        it 'returns the original message when an Evolution WAID is retried' do
+          params = { content: 'test-message', message_type: 'incoming', source_id: 'WAID:3EB0APIRETRY' }
+          url = api_v1_account_conversation_messages_url(account_id: account.id, conversation_id: conversation.display_id)
+          headers = agent.create_new_auth_token
+
+          post url, params: params, headers: headers, as: :json
+          first_response = response.parsed_body
+          post url, params: params, headers: headers, as: :json
+
+          expect(response).to have_http_status(:success)
+          expect(response.parsed_body['id']).to eq(first_response['id'])
+          expect(conversation.messages.where(source_id: params[:source_id]).count).to eq(1)
+        end
       end
     end
 
